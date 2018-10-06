@@ -1,0 +1,9 @@
+*.sublime*
+*.swp
+Session.vim
+nogit-*
+.DS_Store
+coverage.txt
+.screenrc
+dist/
+
