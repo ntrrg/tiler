@@ -1,5 +1,7 @@
 FROM golang:1.11-alpine3.8 AS build
 WORKDIR /go/src/github.com/ntrrg/tiler
+COPY vendor vendor
+COPY pkg pkg
 COPY main.go .
 RUN go install
 

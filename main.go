@@ -6,14 +6,16 @@ package main
 import (
 	"fmt"
 	"image"
-	"image/color"
-	"image/draw"
 	"image/jpeg"
 	"log"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"golang.org/x/image/colornames"
+
+	"github.com/ntrrg/tiler/pkg/tiler"
+
+	_ "golang.org/x/image/webp"
 	_ "image/png"
 )
 
@@ -22,14 +24,6 @@ var (
 	// Letter72 = image.Rect(0, 0, 612, 792)
 	// Letter200 = image.Rect(0, 0, 1700, 2200)
 	Letter300 = image.Rect(0, 0, 2550, 3300)
-)
-
-// Background colors
-var (
-	White = color.RGBA{255, 255, 255, 255}
-	// Red   = color.RGBA{255, 0, 0, 255}
-	// Green = color.RGBA{0, 255, 0, 255}
-	// Blue  = color.RGBA{0, 0, 255, 255}
 )
 
 func main() {
@@ -45,74 +39,64 @@ func main() {
 		images = append(images, imgs...)
 	}
 
-	var dst *image.RGBA
-	size := Letter300
+	var dst tiler.Tiler
 
-	var i, n int8
-	var r image.Rectangle
+	var n int8
 	var partial bool
 
-	for _, path := range images {
-		file, err := os.Open(strings.Replace(path, " ", "\\ ", 0))
+	for j, path := range images {
+		i := int64(j % 4)
+
+		if i == 0 {
+			dst = tiler.New(colornames.Map["white"], Letter300, 4)
+		}
+
+		file, err := os.Open(path)
 
 		if err != nil {
 			log.Fatalf("Can't open image %v -> %v", path, err)
 		}
 
-		img, _, err := image.Decode(file)
+		defer file.Close()
+
+		_, err = dst.TileAt(file, i, nil)
 
 		if err != nil {
 			log.Fatalf("Can't decode the image %v -> %v", path, err)
 		}
 
-		switch i {
-		case 0:
-			dst = image.NewRGBA(size)
-			draw.Draw(dst, dst.Bounds(), &image.Uniform{White}, image.ZP, draw.Src)
-
-			r = image.Rect(0, 0, size.Max.X/2, size.Max.Y/2)
-		case 1, 3:
-			r = r.Add(image.Pt(r.Max.X, 0))
-		case 2:
-			r = r.Sub(image.Pt(r.Min.X, -r.Max.Y))
-		}
-
-		draw.Draw(dst, r, img, image.ZP, draw.Src)
-
 		if i == 3 {
-			i = 0
 			partial = false
-			imgFile, err := os.Create(fmt.Sprintf("output-%d.jpg", n))
+
+			err := writeBlock(dst, n)
 
 			if err != nil {
 				log.Fatalf("Can't create the output file -> %v", err)
 			}
 
-			if err := jpeg.Encode(imgFile, dst, nil); err != nil {
-				imgFile.Close()
-				log.Fatalf("Can't create the image -> %v", err)
-			}
-
-			imgFile.Close()
 			n++
 		} else {
 			partial = true
-			i++
 		}
 	}
 
 	if partial {
-		imgFile, err := os.Create(fmt.Sprintf("output-%d.jpg", n))
+		err := writeBlock(dst, n)
 
 		if err != nil {
 			log.Fatalf("Can't create the output file -> %v", err)
 		}
-
-		if err := jpeg.Encode(imgFile, dst, nil); err != nil {
-			imgFile.Close()
-			log.Fatalf("Can't create the image -> %v", err)
-		}
-
-		imgFile.Close()
 	}
+}
+
+func writeBlock(dst image.Image, n int8) error {
+	imgFile, err := os.Create(fmt.Sprintf("output-%d.jpg", n))
+
+	if err != nil {
+		return err
+	}
+
+	defer imgFile.Close()
+
+	return jpeg.Encode(imgFile, dst, nil)
 }

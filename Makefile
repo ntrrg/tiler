@@ -27,6 +27,8 @@ docs-ref:
 
 dist/tiler: $(gosrcfiles)
 	go build -o $@
+	@du -sh $@
+	@file $@
 
 $(make_bin)/dep:
 	mkdir -p $(make_bin)
@@ -72,7 +74,7 @@ format:
 .PHONY: lint
 lint:
 	gofmt -d -e -s $(gofiles)
-	golint ./
+	golint ./ ./pkg/...
 
 .PHONY: lint-md
 lint-md:
@@ -80,7 +82,7 @@ lint-md:
 
 .PHONY: qa
 qa: $(make_bin)/gometalinter
-	PATH="$(make_bin):$$PATH" CGO_ENABLED=0 gometalinter --tests ./
+	PATH="$(make_bin):$$PATH" CGO_ENABLED=0 gometalinter --tests ./ ./pkg/...
 
 .PHONY: test
 test:

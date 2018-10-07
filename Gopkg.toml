@@ -1,0 +1,8 @@
+[prune]
+  non-go = true
+  go-tests = true
+  unused-packages = true
+
+[[constraint]]
+  name = "golang.org/x/image"
+  revision = "991ec62608f3c0da01d400756917825d1e2fd528"
