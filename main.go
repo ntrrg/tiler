@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/image/colornames"
 
-	"github.com/ntrrg/tiler/pkg/tiler"
+	"github.com/ntrrg/tiler/pkg/tile"
 
 	_ "golang.org/x/image/webp"
 	_ "image/png"
@@ -39,7 +39,7 @@ func main() {
 		images = append(images, imgs...)
 	}
 
-	var dst tiler.Tiler
+	var dst *tile.Tiler
 
 	var n int8
 	var partial bool
@@ -48,7 +48,7 @@ func main() {
 		i := int64(j % 4)
 
 		if i == 0 {
-			dst = tiler.New(colornames.Map["white"], Letter300, 4)
+			dst = tile.New(colornames.Map["white"], Letter300, 4)
 		}
 
 		file, err := os.Open(path)
@@ -59,7 +59,7 @@ func main() {
 
 		defer file.Close()
 
-		_, err = dst.TileAt(file, i, nil)
+		_, err = dst.DrawAt(file, i, nil)
 
 		if err != nil {
 			log.Fatalf("Can't decode the image %v -> %v", path, err)
