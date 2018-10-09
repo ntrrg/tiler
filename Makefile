@@ -26,7 +26,7 @@ docs-ref:
 	godoc -http ":$${GODOC_PORT:-6060}" -play
 
 dist/tiler: $(gosrcfiles)
-	go build -o $@
+	go build ${FLAGS} -o $@
 	@du -sh $@
 	@file $@
 
