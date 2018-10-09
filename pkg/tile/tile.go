@@ -47,7 +47,11 @@ func New(bg color.Color, s image.Rectangle, t int64) *Tiler {
 	img := image.NewRGBA(s)
 	draw.Draw(img, img.Bounds(), &image.Uniform{bg}, image.ZP, draw.Src)
 
-	return &Tiler{img, bg, t, 0}
+	return &Tiler{
+		Image: img,
+		bg:    bg,
+		grid:  t,
+	}
 }
 
 // Seek implements io.Seeker.
@@ -92,7 +96,18 @@ func (t *Tiler) DrawAt(r io.Reader, off int64, f *Format) (string, error) {
 // offset. When the last position has been used, DrawAt returns io.EOF as
 // error.
 func (t *Tiler) Draw(r io.Reader, f *Format) (string, error) {
-	return "", nil
+	df, err := t.DrawAt(r, t.off, f)
+
+	if err != nil {
+		return df, err
+	}
+
+	if t.off == t.grid-1 {
+		err = io.EOF
+	}
+
+	t.off++
+	return df, err
 }
 
 // Format is a set of format options used by Tiler for drawing a tile.
