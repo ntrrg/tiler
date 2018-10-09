@@ -33,6 +33,7 @@ type Tiler struct {
 	draw.Image
 
 	bg color.Color
+
 	grid, off int64
 }
 

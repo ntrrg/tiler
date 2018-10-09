@@ -4,12 +4,14 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"image/jpeg"
 	"log"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"golang.org/x/image/colornames"
 
@@ -19,84 +21,173 @@ import (
 	_ "image/png"
 )
 
-// Output sizes
-var (
-	// Letter72 = image.Rect(0, 0, 612, 792)
-	// Letter200 = image.Rect(0, 0, 1700, 2200)
-	Letter300 = image.Rect(0, 0, 2550, 3300)
-)
-
-func main() {
-	images := []string{}
-
-	for _, p := range []string{"*.jpg", "*.jpeg", "*.png"} {
-		imgs, err := filepath.Glob(p)
-
-		if err != nil {
-			log.Fatal("Bad GLOB pattern")
-		}
-
-		images = append(images, imgs...)
-	}
-
-	var dst *tile.Tiler
-
-	var n int8
-	var partial bool
-
-	for j, path := range images {
-		i := int64(j % 4)
-
-		if i == 0 {
-			dst = tile.New(colornames.Map["white"], Letter300, 4)
-		}
-
-		file, err := os.Open(path)
-
-		if err != nil {
-			log.Fatalf("Can't open image %v -> %v", path, err)
-		}
-
-		defer file.Close()
-
-		_, err = dst.DrawAt(file, i, nil)
-
-		if err != nil {
-			log.Fatalf("Can't decode the image %v -> %v", path, err)
-		}
-
-		if i == 3 {
-			partial = false
-
-			err := writeBlock(dst, n)
-
-			if err != nil {
-				log.Fatalf("Can't create the output file -> %v", err)
-			}
-
-			n++
-		} else {
-			partial = true
-		}
-	}
-
-	if partial {
-		err := writeBlock(dst, n)
-
-		if err != nil {
-			log.Fatalf("Can't create the output file -> %v", err)
-		}
-	}
+// OutputSizes is a set of commonly used output sizes.
+var OutputSizes = map[string]image.Rectangle{
+	"letter72":  image.Rect(0, 0, 612, 792),
+	"letter200": image.Rect(0, 0, 1700, 2200),
+	"letter300": image.Rect(0, 0, 2550, 3300),
 }
 
-func writeBlock(dst image.Image, n int8) error {
-	imgFile, err := os.Create(fmt.Sprintf("output-%d.jpg", n))
+func main() {
+	var (
+		verbose bool
+		tiles   int64
+		bg      string
+		reverse bool
+		size    string
+		output  string
 
-	if err != nil {
-		return err
+		format = tile.DefaultFormat
+	)
+
+	flag.BoolVar(&verbose, "v", false, "Verbose output")
+	flag.Int64Var(&tiles, "n", 4, "[WIP] Number of tiles, at least 2.")
+
+	flag.BoolVar(
+		&reverse,
+		"reverse",
+		false,
+		"Tile the given images in reverse order",
+	)
+
+	flag.StringVar(&size, "size", "letter300", "Output file size")
+	flag.StringVar(&bg, "bg", "white", "Output file background color")
+	flag.StringVar(&format.Resize, "resize", "auto", "Resizing mode")
+	flag.StringVar(&format.Align, "align", "center", "Horizontal alignment")
+	flag.StringVar(&format.VAlign, "valign", "middle", "Vertical alignment")
+
+	flag.StringVar(
+		&output,
+		"o",
+		"output%d.jpg",
+		"Output file, %d in file name is replaced by file number",
+	)
+
+	flag.Parse()
+
+	log.SetFlags(0)
+	images := flag.Args()
+
+	ni := len(images)
+
+	if int64(ni) < tiles {
+		log.Fatalf("At least %d images should be given\n", tiles)
 	}
 
-	defer imgFile.Close()
+	if reverse {
+		if verbose {
+			fmt.Println("Using reverse mode")
+		}
 
-	return jpeg.Encode(imgFile, dst, nil)
+		for i, j := 0, ni-1; i < ni/2; i, j = i+1, j-1 {
+			images[i], images[j] = images[j], images[i]
+		}
+	}
+
+	var wt sync.WaitGroup
+	nt := int64(ni) / tiles
+	extra := int64(ni) % tiles
+
+	if extra != 0 {
+		nt++
+	}
+
+	if nt > 1 && verbose {
+		fmt.Printf("%d files will be generated\n", nt)
+	}
+
+	for i := int64(0); i < nt; i++ {
+		a := i * tiles
+		b := a + tiles
+
+		if i == nt-1 && extra != 0 {
+			b += extra - tiles
+		}
+
+		wt.Add(1)
+
+		go func(nt int64, images []string) {
+			if verbose {
+				fmt.Printf("Generating tiled image #%d using %v..\n", nt, images)
+			}
+
+			var wi sync.WaitGroup
+			dst := tile.New(colornames.Map[bg], OutputSizes[size], tiles)
+
+			for off, imgPath := range images {
+				wi.Add(1)
+
+				go func(imgPath string, off int64) {
+					imgFile, err := os.Open(filepath.Clean(imgPath))
+
+					if err != nil {
+						log.Fatalf("Can't open image %v -> %v\n", imgPath, err)
+					}
+
+					defer func() {
+						err2 := imgFile.Close()
+
+						if err2 != nil {
+							log.Println("Can't close the file")
+						}
+					}()
+
+					if verbose {
+						fmt.Printf("Writing image %s..\n", imgPath)
+					}
+
+					_, err = dst.DrawAt(imgFile, off, format)
+
+					if err != nil {
+						log.Fatalf("Can't decode the image %v -> %v\n", imgPath, err)
+					}
+
+					if verbose {
+						fmt.Printf("Image %s written\n", imgPath)
+					}
+
+					wi.Done()
+				}(imgPath, int64(off))
+			}
+
+			wi.Wait()
+
+			if verbose {
+				fmt.Printf("Tiled image #%d generated\n", nt)
+			}
+
+			name := filepath.Clean(fmt.Sprintf(output, nt))
+			imgFile, err := os.Create(name)
+
+			if err != nil {
+				log.Fatalf("Can't create the output file -> %v\n", err)
+			}
+
+			defer func() {
+				err2 := imgFile.Close()
+
+				if err2 != nil {
+					log.Println("Can't close the file")
+				}
+			}()
+
+			if verbose {
+				fmt.Printf("Writing image #%d to %s..\n", nt, name)
+			}
+
+			err = jpeg.Encode(imgFile, dst, nil)
+
+			if err != nil {
+				log.Fatalf("Can't encode the output file -> %v\n", err)
+			}
+
+			if verbose {
+				fmt.Printf("File %s written\n", name)
+			}
+
+			wt.Done()
+		}(i, images[a:b])
+	}
+
+	wt.Wait()
 }
