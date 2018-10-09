@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"image"
 	"image/jpeg"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -111,46 +112,37 @@ func main() {
 				fmt.Printf("Generating tiled image #%d using %v..\n", nt, images)
 			}
 
-			var wi sync.WaitGroup
 			dst := tile.New(colornames.Map[bg], OutputSizes[size], tiles)
 
-			for off, imgPath := range images {
-				wi.Add(1)
+			for _, imgPath := range images {
+				imgFile, err := os.Open(filepath.Clean(imgPath))
 
-				go func(imgPath string, off int64) {
-					imgFile, err := os.Open(filepath.Clean(imgPath))
+				if err != nil {
+					log.Fatalf("Can't open image '%v' -> %v\n", imgPath, err)
+				}
 
-					if err != nil {
-						log.Fatalf("Can't open image %v -> %v\n", imgPath, err)
+				defer func() {
+					err2 := imgFile.Close()
+
+					if err2 != nil {
+						log.Println("Can't close the file")
 					}
+				}()
 
-					defer func() {
-						err2 := imgFile.Close()
+				if verbose {
+					fmt.Printf("Writing image '%s'..\n", imgPath)
+				}
 
-						if err2 != nil {
-							log.Println("Can't close the file")
-						}
-					}()
+				_, err = dst.Draw(imgFile, format)
 
-					if verbose {
-						fmt.Printf("Writing image %s..\n", imgPath)
-					}
+				if err != nil && err != io.EOF {
+					log.Fatalf("Can't decode the image '%v' -> %v\n", imgPath, err)
+				}
 
-					_, err = dst.DrawAt(imgFile, off, format)
-
-					if err != nil {
-						log.Fatalf("Can't decode the image %v -> %v\n", imgPath, err)
-					}
-
-					if verbose {
-						fmt.Printf("Image %s written\n", imgPath)
-					}
-
-					wi.Done()
-				}(imgPath, int64(off))
+				if verbose {
+					fmt.Printf("Image '%s' written\n", imgPath)
+				}
 			}
-
-			wi.Wait()
 
 			if verbose {
 				fmt.Printf("Tiled image #%d generated\n", nt)
@@ -172,7 +164,7 @@ func main() {
 			}()
 
 			if verbose {
-				fmt.Printf("Writing image #%d to %s..\n", nt, name)
+				fmt.Printf("Writing image #%d to '%s'..\n", nt, name)
 			}
 
 			err = jpeg.Encode(imgFile, dst, nil)
@@ -182,7 +174,7 @@ func main() {
 			}
 
 			if verbose {
-				fmt.Printf("File %s written\n", name)
+				fmt.Printf("File '%s' written\n", name)
 			}
 
 			wt.Done()
