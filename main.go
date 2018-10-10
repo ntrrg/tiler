@@ -121,14 +121,6 @@ func main() {
 					log.Fatalf("Can't open image '%v' -> %v\n", imgPath, err)
 				}
 
-				defer func() {
-					err2 := imgFile.Close()
-
-					if err2 != nil {
-						log.Println("Can't close the file")
-					}
-				}()
-
 				if verbose {
 					fmt.Printf("Writing image '%s'..\n", imgPath)
 				}
@@ -136,8 +128,11 @@ func main() {
 				_, err = dst.Draw(imgFile, format)
 
 				if err != nil && err != io.EOF {
+					closeFile(imgPath, imgFile)
 					log.Fatalf("Can't decode the image '%v' -> %v\n", imgPath, err)
 				}
+
+				closeFile(imgPath, imgFile)
 
 				if verbose {
 					fmt.Printf("Image '%s' written\n", imgPath)
@@ -155,13 +150,7 @@ func main() {
 				log.Fatalf("Can't create the output file -> %v\n", err)
 			}
 
-			defer func() {
-				err2 := imgFile.Close()
-
-				if err2 != nil {
-					log.Println("Can't close the file")
-				}
-			}()
+			defer closeFile(name, imgFile)
 
 			if verbose {
 				fmt.Printf("Writing image #%d to '%s'..\n", nt, name)
@@ -182,4 +171,12 @@ func main() {
 	}
 
 	wt.Wait()
+}
+
+func closeFile(name string, file *os.File) {
+	err := file.Close()
+
+	if err != nil {
+		log.Printf("Can't close the file '%v' -> %v\n", name)
+	}
 }
