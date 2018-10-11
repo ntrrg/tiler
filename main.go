@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"golang.org/x/image/colornames"
 
@@ -30,8 +31,12 @@ var OutputSizes = map[string]image.Rectangle{
 }
 
 func main() {
+	start := time.Now()
+
 	var (
 		verbose bool
+		debug   bool
+		dryrun  bool
 		tiles   int64
 		bg      string
 		reverse bool
@@ -42,7 +47,14 @@ func main() {
 	)
 
 	flag.BoolVar(&verbose, "v", false, "Verbose output")
-	flag.Int64Var(&tiles, "n", 4, "[WIP] Number of tiles, at least 2.")
+	flag.BoolVar(&debug, "debug", false, "Enable debugging")
+
+	flag.BoolVar(
+		&dryrun,
+		"dry-run",
+		false,
+		"Process the images but don't write to disk",
+	)
 
 	flag.BoolVar(
 		&reverse,
@@ -51,6 +63,7 @@ func main() {
 		"Tile the given images in reverse order",
 	)
 
+	flag.Int64Var(&tiles, "tiles", 4, "[WIP] Number of tiles, at least 2")
 	flag.StringVar(&size, "size", "letter300", "Output file size")
 	flag.StringVar(&bg, "bg", "white", "Output file background color")
 	flag.StringVar(&format.Resize, "resize", "auto", "Resizing mode")
@@ -66,6 +79,10 @@ func main() {
 
 	flag.Parse()
 
+	if debug {
+		verbose = true
+	}
+
 	log.SetFlags(0)
 	images := flag.Args()
 
@@ -76,10 +93,6 @@ func main() {
 	}
 
 	if reverse {
-		if verbose {
-			fmt.Println("Using reverse mode")
-		}
-
 		for i, j := 0, ni-1; i < ni/2; i, j = i+1, j-1 {
 			images[i], images[j] = images[j], images[i]
 		}
@@ -93,10 +106,6 @@ func main() {
 		nt++
 	}
 
-	if nt > 1 && verbose {
-		fmt.Printf("%d files will be generated\n", nt)
-	}
-
 	for i := int64(0); i < nt; i++ {
 		a := i * tiles
 		b := a + tiles
@@ -108,7 +117,7 @@ func main() {
 		wt.Add(1)
 
 		go func(nt int64, images []string) {
-			if verbose {
+			if debug {
 				fmt.Printf("Generating tiled image #%d using %v..\n", nt, images)
 			}
 
@@ -121,8 +130,8 @@ func main() {
 					log.Fatalf("Can't open image '%v' -> %v\n", imgPath, err)
 				}
 
-				if verbose {
-					fmt.Printf("Writing image '%s'..\n", imgPath)
+				if debug {
+					fmt.Printf("Writing image '%s at tiled image #%d'..\n", imgPath, nt)
 				}
 
 				_, err = dst.Draw(imgFile, format)
@@ -134,36 +143,35 @@ func main() {
 
 				closeFile(imgPath, imgFile)
 
-				if verbose {
-					fmt.Printf("Image '%s' written\n", imgPath)
+				if debug {
+					fmt.Printf("Image '%s' written at tiled image #%d\n", imgPath, nt)
 				}
 			}
 
-			if verbose {
-				fmt.Printf("Tiled image #%d generated\n", nt)
-			}
-
 			name := filepath.Clean(fmt.Sprintf(output, nt))
-			imgFile, err := os.Create(name)
 
-			if err != nil {
-				log.Fatalf("Can't create the output file -> %v\n", err)
+			if debug {
+				fmt.Printf("Tiled image #%d generated, writing to '%s'\n", nt, name)
 			}
 
-			defer closeFile(name, imgFile)
+			if !dryrun {
+				imgFile, err := os.Create(name)
 
-			if verbose {
-				fmt.Printf("Writing image #%d to '%s'..\n", nt, name)
+				if err != nil {
+					log.Fatalf("Can't create the output file -> %v\n", err)
+				}
+
+				defer closeFile(name, imgFile)
+
+				err = jpeg.Encode(imgFile, dst, nil)
+
+				if err != nil {
+					log.Fatalf("Can't encode the output file -> %v\n", err)
+				}
 			}
 
-			err = jpeg.Encode(imgFile, dst, nil)
-
-			if err != nil {
-				log.Fatalf("Can't encode the output file -> %v\n", err)
-			}
-
-			if verbose {
-				fmt.Printf("File '%s' written\n", name)
+			if debug {
+				fmt.Printf("Tiled image #%d has been written ('%s')\n", nt, name)
 			}
 
 			wt.Done()
@@ -171,6 +179,33 @@ func main() {
 	}
 
 	wt.Wait()
+
+	if verbose {
+		fmt.Println("Used options:")
+
+		if reverse {
+			fmt.Println("  Reverse mode: true")
+		}
+
+		fmt.Printf("  Name: %s\n", output)
+		fmt.Printf("  Size: %s\n", size)
+		fmt.Printf("  Background color: %s\n", bg)
+		fmt.Printf("  Tiles: %d\n", tiles)
+		fmt.Printf("    Resize mode: %s\n", format.Resize)
+		fmt.Printf("    Alignment: %s\n", format.Align)
+		fmt.Printf("    Vertical alignment: %s\n", format.VAlign)
+
+		format = tile.DefaultFormat
+
+		if nt > 1 {
+			fmt.Printf(
+				"\n%d files generated from %d images in %s\n",
+				nt,
+				ni,
+				time.Since(start),
+			)
+		}
+	}
 }
 
 func closeFile(name string, file *os.File) {
