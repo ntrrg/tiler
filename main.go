@@ -28,6 +28,10 @@ var OutputSizes = map[string]image.Rectangle{
 	"letter72":  image.Rect(0, 0, 612, 792),
 	"letter200": image.Rect(0, 0, 1700, 2200),
 	"letter300": image.Rect(0, 0, 2550, 3300),
+
+	"hletter72":  image.Rect(0, 0, 792, 612),
+	"hletter200": image.Rect(0, 0, 2200, 1700),
+	"hletter300": image.Rect(0, 0, 3300, 2550),
 }
 
 func main() {
@@ -66,7 +70,7 @@ func main() {
 	flag.Int64Var(&tiles, "tiles", 4, "[WIP] Number of tiles, at least 2")
 	flag.StringVar(&size, "size", "letter300", "Output file size")
 	flag.StringVar(&bg, "bg", "white", "Output file background color")
-	flag.StringVar(&format.Resize, "resize", "auto", "Resizing mode")
+	flag.StringVar(&format.Resize, "resize", "contain", "Resizing mode")
 	flag.StringVar(&format.Align, "align", "center", "Horizontal alignment")
 	flag.StringVar(&format.VAlign, "valign", "middle", "Vertical alignment")
 
@@ -88,8 +92,8 @@ func main() {
 
 	ni := len(images)
 
-	if int64(ni) < tiles {
-		log.Fatalf("At least %d images should be given\n", tiles)
+	if ni < 2 {
+		log.Fatalln("At least 1 image should be given")
 	}
 
 	if reverse {

@@ -20,7 +20,7 @@ var scaler draw.Scaler = draw.ApproxBiLinear
 var DefaultFormat = &Format{
 	Align:  "center",
 	VAlign: "middle",
-	Resize: "auto",
+	Resize: "contain",
 }
 
 // SetScaler sets the scaler used to scale images written into tiles.
@@ -119,52 +119,82 @@ type Format struct {
 
 // Format returns a tile and an image formatted with f format options.
 func (f *Format) Format(tile image.Rectangle, img image.Image) (image.Rectangle, image.Image) {
-	switch f.Resize {
-	case "auto":
-		r := img.Bounds()
-		ls := r.Dx() > r.Dy()
-
-		if (ls && r.Dx() > tile.Dx()) || (!ls && r.Dy() > tile.Dy()) {
-			img = scaleAToB(img, tile)
-		}
-	case "fill":
-		img = scaleAToB(img, tile)
+	if f.Resize != "none" {
+		img = scaleImage(img, tile, f.Resize)
 	}
+
+	// switch f.Algin {
+	// case "center":
+	// case "right":
+	// }
 
 	return tile, img
 }
 
-// scaleAToB scales a to fill b.
-func scaleAToB(a, b image.Image) image.Image {
+// scaleImage returns a scaled copy of a to b according to mode. There are
+// three modes:
+//
+// * "auto": scales a if it is bigger.
+//
+// * "contain": scales a to fill b without overflow.
+//
+// * "cover": scales a to full fill b.
+//
+// If an invalid mode is given, a will be returned as is.
+func scaleImage(a, b image.Image, mode string) image.Image {
+	var x, y int
 	ar := a.Bounds()
 	br := b.Bounds()
-	ax := float64(ar.Dx())
-	ay := float64(ar.Dy())
-	bx := float64(br.Dx())
-	by := float64(br.Dy())
+	ax := ar.Dx()
+	ay := ar.Dy()
+	bx := br.Dx()
+	by := br.Dy()
+	xC := getScaleFactor(ax, bx)
+	yC := getScaleFactor(ay, by)
 
-	var s float64
-	ls := ax > ay
+	switch mode {
+	case "auto":
+		if xC >= 1 && yC >= 1 {
+			return a
+		}
 
-	if ls {
-		if ax == bx {
+		fallthrough
+	case "contain":
+		if xC == 1 || yC == 1 {
 			return a
-		} else if ax > bx {
-			s = 1 / (ax / bx)
+		} else if xC < yC {
+			x, y = bx, int(float64(ay)*xC)
 		} else {
-			s = bx / ax
+			x, y = int(float64(ax)*yC), by
 		}
-	} else {
-		if ay == by {
+	case "cover":
+		if xC == 1 || yC == 1 {
 			return a
-		} else if ay > by {
-			s = 1 / (ay / by)
+		} else if xC < yC {
+			x, y = int(float64(ax)*yC), by
 		} else {
-			s = by / ay
+			x, y = bx, int(float64(ay)*xC)
 		}
+	default:
+		return a
 	}
 
-	dst := image.NewRGBA(image.Rect(0, 0, int(ax*s), int(ay*s)))
+	dst := image.NewRGBA(image.Rect(0, 0, x, y))
 	scaler.Scale(dst, dst.Bounds(), a, a.Bounds(), draw.Over, nil)
 	return dst
+}
+
+// getScaleFactor returns the scale factor for a to be similar to b.
+func getScaleFactor(a, b int) (C float64) {
+	x, y := float64(a), float64(b)
+
+	if x == y {
+		C = 1
+	} else if x > y {
+		C = 1 / (x / y)
+	} else {
+		C = y / x
+	}
+
+	return C
 }
