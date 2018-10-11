@@ -18,6 +18,7 @@ var scaler draw.Scaler = draw.ApproxBiLinear
 // DefaultFormat is a set of commonly used format options and may be used as
 // a starter point for custom format options.
 var DefaultFormat = &Format{
+	Margin: 0,
 	Align:  "center",
 	VAlign: "middle",
 	Resize: "contain",
@@ -112,6 +113,7 @@ func (t *Tiler) Draw(r io.Reader, f *Format) (string, error) {
 
 // Format is a set of format options used by Tiler for drawing a tile.
 type Format struct {
+	Margin int64
 	Align  string
 	VAlign string
 	Resize string
@@ -119,6 +121,13 @@ type Format struct {
 
 // Format returns a tile and an image formatted with f format options.
 func (f *Format) Format(tile image.Rectangle, img image.Image) (image.Rectangle, image.Image) {
+	if f.Margin > 0 {
+		tile.Min.X += int(f.Margin)
+		tile.Min.Y += int(f.Margin)
+		tile.Max.X -= int(f.Margin)
+		tile.Max.Y -= int(f.Margin)
+	}
+
 	if f.Resize != "none" {
 		img = scaleImage(img, tile, f.Resize)
 	}

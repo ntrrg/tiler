@@ -71,6 +71,7 @@ func main() {
 	flag.StringVar(&size, "size", "letter300", "Output file size")
 	flag.StringVar(&bg, "bg", "white", "Output file background color")
 	flag.StringVar(&format.Resize, "resize", "contain", "Resizing mode")
+	flag.Int64Var(&format.Margin, "margin", 0, "Margin")
 	flag.StringVar(&format.Align, "align", "center", "Horizontal alignment")
 	flag.StringVar(&format.VAlign, "valign", "middle", "Vertical alignment")
 
@@ -187,15 +188,13 @@ func main() {
 	if verbose {
 		fmt.Println("Used options:")
 
-		if reverse {
-			fmt.Println("  Reverse mode: true")
-		}
-
+		fmt.Printf("  Reverse mode: %v\n", reverse)
 		fmt.Printf("  Name: %s\n", output)
 		fmt.Printf("  Size: %s\n", size)
 		fmt.Printf("  Background color: %s\n", bg)
 		fmt.Printf("  Tiles: %d\n", tiles)
 		fmt.Printf("    Resize mode: %s\n", format.Resize)
+		fmt.Printf("    Margin: %dpx\n", format.Margin)
 		fmt.Printf("    Alignment: %s\n", format.Align)
 		fmt.Printf("    Vertical alignment: %s\n", format.VAlign)
 
